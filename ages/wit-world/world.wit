@@ -1,0 +1,16 @@
+package ffrwd:faceage-ages;
+
+/// Age estimation as a windowed filter that does native inference. It
+/// exports the stream interface, so frames reach it the way they reach any
+/// module, and imports `wasi:nn` - the standard interface, not anything of
+/// ours. It imports no filesystem: the graph file is the host's, and this
+/// module only knows the name it was bound to. The boxes it scores arrive as
+/// the rows riding each frame, so it reads rows as well as writing them.
+world ages {
+  export ffrwd:av/window-filter@0.15.0;
+
+  import wasi:nn/tensor@0.2.0-rc-2024-10-28;
+  import wasi:nn/graph@0.2.0-rc-2024-10-28;
+  import wasi:nn/inference@0.2.0-rc-2024-10-28;
+  import wasi:nn/errors@0.2.0-rc-2024-10-28;
+}

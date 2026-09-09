@@ -1,0 +1,43 @@
+{
+  "name": "ffrwd/faceage",
+  "version": "0.1.0",
+  "description": "Ages on the faces ffrwd/rfdetr finds, for blurring the children in a video and nobody else: one row per face with an age, followed across frames, and a matte for the rows a query keeps. The weights are TrungTran's FaceAge ClientScan (Apache-2.0, built with DINOv3), fetched at install.",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/imbcmdth/ffrwd-package-faceage",
+  "capabilities": [
+    "nn"
+  ],
+  "dependencies": {
+    "ffrwd/wasm": "0.15.0",
+    "ffrwd/rfdetr": "0.2.0",
+    "ffrwd/mask_tools": "1.0.3"
+  },
+  "keywords": [
+    "face",
+    "age",
+    "children",
+    "minors",
+    "blur",
+    "mosaic",
+    "privacy",
+    "nn"
+  ],
+  "lib": {
+    "ages": "src/model.sql",
+    "faces_mask": "src/faces.sql"
+  },
+  "bin": {
+    "blur-children": "recipes/blur-children.sql",
+    "mosaic-children": "recipes/mosaic-children.sql",
+    "ages": "recipes/ages.sql"
+  },
+  "models": {
+    "ages": {
+      "repo": "imbcmdth/faceage-onnx",
+      "revision": "0e71b69830e460cb1c7d1d3085c277f3b17c4f2c",
+      "file": "faceage-dino-fp16.onnx",
+      "sha256": "b2e804783e197066cd8cf65a7cbc39a0579ea87c34660abd8ca942df8672cf70",
+      "not_on": ["directml"]
+    }
+  }
+}

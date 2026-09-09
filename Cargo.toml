@@ -1,0 +1,16 @@
+[workspace]
+# The wasm modules this package ships. They build into
+# target/wasm32-wasip2/release/, which is where the package's lib SQL names
+# them. `common` is shared Rust the modules compile in; it ships nothing of
+# its own.
+members = [
+    "common",
+    "ages",
+    "faces-mask",
+]
+resolver = "2"
+
+[profile.release]
+opt-level = 3
+lto = true
+strip = true
