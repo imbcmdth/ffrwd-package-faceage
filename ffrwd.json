@@ -1,6 +1,6 @@
 {
   "name": "ffrwd/faceage",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Ages on the faces ffrwd/rfdetr finds, for blurring the children in a video and nobody else: one row per face with an age, followed across frames, and a matte for the rows a query keeps. The weights are TrungTran's FaceAge ClientScan (Apache-2.0, built with DINOv3), fetched at install.",
   "license": "Apache-2.0",
   "homepage": "https://github.com/imbcmdth/ffrwd-package-faceage",
@@ -10,7 +10,7 @@
   "dependencies": {
     "ffrwd/wasm": "0.15.0",
     "ffrwd/rfdetr": "0.2.0",
-    "ffrwd/mask_tools": "1.0.3"
+    "ffrwd/mask_tools": "1.1.1"
   },
   "keywords": [
     "face",
