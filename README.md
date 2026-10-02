@@ -8,7 +8,7 @@ on each; the query keeps the rows under an age; `ffrwd/rfdetr`'s
 mosaics where the matte says. Everything downstream of the model is
 native ffmpeg.
 
-Requires ffrwd 0.29.
+Requires ffrwd 0.29, whose `ffrwd/wasm` is 0.19.1.
 
 ```
 ffrwd run ffrwd/faceage:blur-children -v source=class.mp4 -v max_age=16 -v dest=blurred.mp4
@@ -130,10 +130,8 @@ face it belongs to.
 
 On the check clip of sixty faces the rows are 0.1's row for row, the
 same boxes, confidences and ages, and `blur-children` and
-`mosaic-children` are the same frame for frame. The lines `ages`
-writes no longer carry the `pts` and `time` the 0.28 host added to
-each, which the 0.29 host does not yet write for a node's rows; a
-face's `start_t` is there in their place.
+`mosaic-children` are the same frame for frame. Each row carries the
+`pts` and `time` it did, and a face's `start_t` and `id` beside them.
 
 ## Building
 
