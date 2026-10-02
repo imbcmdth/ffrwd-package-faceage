@@ -1,10 +1,11 @@
 //! What the faceage modules share: the box math the tracker follows faces
-//! with, and the CORAL head the age comes out of. Nothing here touches
-//! `wasi:nn` or the wit bindings, so a module compiles it in as plain Rust and
-//! its tests run on the host.
+//! with, the CORAL head the age comes out of, and the graph run through
+//! `wasi:nn`.
 //!
 //! Turning a frame into a tensor is not here: `ages` asks the host for `rgba`
 //! and `ffrwd-frame` crops, resizes and normalizes it.
+
+pub mod nn;
 
 /// The square the age model takes its crops at.
 pub const SIDE: usize = 224;
@@ -77,7 +78,10 @@ mod tests {
         logits[20] = 0.0;
         assert!((coral_age(&logits) - 20.5).abs() < 1e-4);
         assert!(coral_age(&[-30.0; 100]) < 0.001, "a newborn");
-        assert!((coral_age(&[30.0; 100]) - 100.0).abs() < 0.001, "and the top");
+        assert!(
+            (coral_age(&[30.0; 100]) - 100.0).abs() < 0.001,
+            "and the top"
+        );
     }
 
     #[test]

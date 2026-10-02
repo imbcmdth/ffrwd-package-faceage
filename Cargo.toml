@@ -6,7 +6,6 @@
 members = [
     "common",
     "ages",
-    "faces-mask",
 ]
 resolver = "2"
 

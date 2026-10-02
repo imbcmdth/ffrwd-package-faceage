@@ -2,8 +2,6 @@
   "format_version": 3,
   "reproducible": true,
   "dependencies": {
-    "ffrwd/wasm": "0.15.0",
-    "ffrwd/rfdetr": "0.2.0",
     "ffrwd/mask_tools": "1.1.1"
   },
   "packages": [
@@ -22,17 +20,6 @@
       "store": "v1/d3/d328202f3596b1ba9234cf634411f900358ecd6ad00de0d7734c04d510636480",
       "dependencies": {
         "ffrwd/wasm": "0.15.0"
-      }
-    },
-    {
-      "kind": "registry",
-      "name": "ffrwd/rfdetr",
-      "version": "0.2.0",
-      "sha256": "d1090906ccaf0645e7af33fc58563cfcc2244319eb0ed26fa1d94a71ded8a855",
-      "store": "v1/d1/d1090906ccaf0645e7af33fc58563cfcc2244319eb0ed26fa1d94a71ded8a855",
-      "dependencies": {
-        "ffrwd/wasm": "0.15.0",
-        "ffrwd/mask_tools": "1.1.1"
       }
     }
   ]

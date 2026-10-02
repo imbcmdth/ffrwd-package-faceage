@@ -1,9 +1,10 @@
 [package]
 name = "faceage-common"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 [lib]
 name = "faceage_common"
 
 [dependencies]
+wit-bindgen = "0.57.1"

@@ -8,11 +8,11 @@
 COPY (
   SELECT ffrwd.mask_tools.mosaic_where(
            v,
-           ffrwd.faceage.faces_mask(
-             ffrwd.faceage.ages(ffrwd.rfdetr.detect_faces(v, :conf), :hold, :every).v,
-             ARRAY(SELECT r FROM unnest(ffrwd.faceage.ages(ffrwd.rfdetr.detect_faces(v, :conf), :hold, :every).faces) r
+           ffrwd.rfdetr.boxes_mask(
+             v,
+             ARRAY(SELECT r FROM unnest(ffrwd.faceage.ages(v, ffrwd.rfdetr.detect_faces(v, :conf), :hold, :every)) r
                    WHERE r.age < :max_age),
-             COALESCE(:grow, 8), COALESCE(:feather, 4)),
+             grow => COALESCE(:grow, 8), feather => COALESCE(:feather, 4)),
            COALESCE(:size, 16)),
          f.audio
   FROM input(:'source') f, unnest(f.video) v

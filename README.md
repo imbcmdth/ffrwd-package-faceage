@@ -1,11 +1,14 @@
 # ffrwd/faceage
 
 Ages on faces, for blurring the children in a video and nobody else.
-`ages` takes the face boxes `ffrwd/rfdetr`'s `detect_faces` puts
-beside the picture and returns the same boxes with an age on each;
-the query keeps the rows under an age; `faces_mask` turns those into a
-matte; and `ffrwd/mask_tools` blurs or mosaics where the matte says.
-Everything downstream of the model is native ffmpeg.
+`ages` reads the picture and the face boxes `ffrwd/rfdetr`'s
+`detect_faces` writes about it, and returns the same boxes with an age
+on each; the query keeps the rows under an age; `ffrwd/rfdetr`'s
+`boxes_mask` turns those into a matte; and `ffrwd/mask_tools` blurs or
+mosaics where the matte says. Everything downstream of the model is
+native ffmpeg.
+
+Requires ffrwd 0.29.
 
 ```
 ffrwd run ffrwd/faceage:blur-children -v source=class.mp4 -v max_age=16 -v dest=blurred.mp4
@@ -14,10 +17,26 @@ ffrwd run ffrwd/faceage:blur-children -v source=class.mp4 -v max_age=16 -v dest=
 ## Model export
 
 - `ages(v, boxes, hold DEFAULT 5, every DEFAULT 1)` returns
-  `STRUCT(v video_stream, faces STRUCT(class text, conf number, x number, y number, w number, h number, age number)[])` -
-  the picture untouched, and every face row it was handed with `age`
-  added, in years to one decimal. `boxes` is the record `detect_faces`
-  returns, so the call is written `ages(ffrwd.rfdetr.detect_faces(v))`.
+  `STRUCT(class text, conf number, x number, y number, w number, h number, age number, start_t number, id number)[]`:
+  one row per face it is following on each frame, the class,
+  confidence and box it was handed with `age` added, in years to one
+  decimal, and the face's name: `start_t`, the time it was first seen,
+  and `id`, how many faces were first seen before it. `boxes` is what
+  `detect_faces` returns, and both name the same picture, so the call is
+  written `ages(v, ffrwd.rfdetr.detect_faces(v))`. The picture is
+  fetched only on a frame where a face is due a score.
+
+```sql
+SELECT ffrwd.mask_tools.blur_where(
+         v, ffrwd.rfdetr.boxes_mask(
+              v,
+              ARRAY(SELECT r FROM unnest(ffrwd.faceage.ages(v, ffrwd.rfdetr.detect_faces(v))) r
+                    WHERE r.age < 16),
+              grow => 8, feather => 4))
+```
+
+The call is written once and runs once; the gather narrows its rows on
+their way to the matte.
 
 A face is not scored afresh every frame. The module follows boxes from
 one frame to the next by overlap, and the age a row carries is the
@@ -58,22 +77,20 @@ on the margin rather than the threshold. Faces the detector never
 finds are never blurred: see the `ffrwd/rfdetr` README for how face
 size in the frame decides that.
 
-## Utility
+## Mattes
 
-- `faces_mask(v, faces, grow DEFAULT 0, feather DEFAULT 0)` - the rows
-  rasterized into a matte; `grow` pads each box in pixels, `feather`
-  softens the edge. It exists because `boxes_mask` in `ffrwd/rfdetr`
-  declares the six-field row and the compiler wants an exact match;
-  this one takes the seven-field row `ages` returns.
+`ffrwd/rfdetr`'s `boxes_mask` reads `x`, `y`, `w` and `h` and lets
+every other field pass, so it rasterizes `ages`' rows as they are.
+0.1's `faces_mask`, a copy of it that took the seven-field row, is gone.
 
 ## Recipes
 
-- `blur-children` - every face aged, the ones under `max_age` blurred.
+- `blur-children`: every face aged, the ones under `max_age` blurred.
   `max_age` is required; `conf`, `grow`, `feather`, `sigma`, `hold`,
   `every` and `track` are optional.
-- `mosaic-children` - the same with a mosaic, `size` in place of
+- `mosaic-children`: the same with a mosaic, `size` in place of
   `sigma`.
-- `ages` - every face with its age as NDJSON, one line per face per
+- `ages`: every face with its age as NDJSON, one line per face per
   frame, no video written.
 
 Run `ffrwd list ffrwd/faceage` for each one's variables, or read the
@@ -102,18 +119,38 @@ from one frame to the next, and sharing the stream among parallel
 instances would hand each of them every other frame, where two people
 in one place are one face by overlap.
 
+## From 0.1
+
+0.1's `ages` handed the picture back with its rows beside it, and the
+recipes wrote `ages(...)` twice, once for the picture and once for the
+rows the gather narrowed. 0.2 writes the rows alone and the recipes
+write the call once: `ages(v, detect_faces(v))`, its rows into
+`boxes_mask(v, ...)`. A row gains `start_t` and `id`, which name the
+face it belongs to.
+
+On the check clip of sixty faces the rows are 0.1's row for row, the
+same boxes, confidences and ages, and `blur-children` and
+`mosaic-children` are the same frame for frame. The lines `ages`
+writes no longer carry the `pts` and `time` the 0.28 host added to
+each, which the 0.29 host does not yet write for a node's rows; a
+face's `start_t` is there in their place.
+
 ## Building
 
-The modules build against the wit from the installed `ffrwd/wasm`
-package and crop, resize and normalize with the
-[ffrwd-frame](https://github.com/imbcmdth/ffrwd-frame) crate. The
-package depends on `ffrwd/rfdetr` 0.2.0 for `detect_faces`:
-
 ```
-ffrwd install -g ffrwd/wasm
 cargo build --target wasm32-wasip2 --release
+cargo test --release
 ffrwd install
 ```
+
+`ages` is a node written with
+[`ffrwd-node`](https://github.com/imbcmdth/ffrwd-node), which carries
+the world it is built against, so there is no `build.rs` and nothing to
+install before building; `common` holds the graph run through
+`wasi:nn`. It crops, resizes and normalizes with the
+[ffrwd-frame](https://github.com/imbcmdth/ffrwd-frame) crate. The
+package depends on `ffrwd/rfdetr` 0.4.0 for `detect_faces` and
+`boxes_mask`, which `ffrwd install` fetches with the model.
 
 ## License
 
