@@ -2,8 +2,9 @@
 //! with, the CORAL head the age comes out of, and the graph run through
 //! `wasi:nn`.
 //!
-//! Turning a frame into a tensor is not here: `ages` asks the host for `rgba`
-//! and `ffrwd-frame` crops, resizes and normalizes it.
+//! Turning a frame into a tensor is not here: the host build of `ages` asks
+//! for `rgba` and `ffrwd-frame` crops, resizes and normalizes it, and the GPU
+//! build asks the host for the tensor (`ffrwd:gpu/nn.crops-tensor`).
 
 pub mod nn;
 

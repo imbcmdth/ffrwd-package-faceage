@@ -26,12 +26,23 @@
 //! flattened by a seventh, and a flatter face reads as a younger one. On the
 //! check clip that alone was worth two years of mean error and put a face of
 //! 66 at 39.
+//!
+//! One source, two builds. `ages.wasm` is the module above, cropping on the
+//! CPU. `ages_gpu.wasm` (the `gpu` feature, built by the `ages-gpu` crate) is
+//! a node beside `ffrwd:gpu`: the host makes each frame's due crops into one
+//! tensor, the same crops made the same way, and on `memory=gpu` the frame
+//! stays on the device. See `gpu.rs`.
+
+#[cfg(feature = "gpu")]
+mod gpu;
 
 use std::collections::VecDeque;
 
 use faceage_common::nn::{Model, Returned};
-use faceage_common::{coral_age, iou, PAD, SIDE};
-use ffrwd_frame::{Filter, Rect, Rgba, IMAGENET};
+use faceage_common::{coral_age, iou, PAD};
+use ffrwd_frame::Rect;
+#[cfg(not(feature = "gpu"))]
+use ffrwd_frame::{Filter, Rgba, IMAGENET};
 use ffrwd_node::{Bound, Init, Input, Node, Out, Output, Result, Shape, Tick};
 use serde::{Deserialize, Serialize};
 
@@ -52,7 +63,12 @@ const MEMORY: usize = 30;
 /// How much two boxes have to overlap to be the same face a frame later.
 const MATCH_IOU: f64 = 0.3;
 
+#[cfg(not(feature = "gpu"))]
 const PARAMS_SCHEMA: &str = r#"{"type":"object","properties":{"hold":{"type":"integer","minimum":0,"maximum":600,"default":5},"every":{"type":"integer","minimum":1,"maximum":600,"default":1}},"additionalProperties":false}"#;
+
+/// The GPU build's: the same two, and where `v` is held.
+#[cfg(feature = "gpu")]
+const PARAMS_SCHEMA: &str = r#"{"type":"object","properties":{"hold":{"type":"integer","minimum":0,"maximum":600,"default":5},"every":{"type":"integer","minimum":1,"maximum":600,"default":1},"memory":{"type":"string","enum":["host","gpu"],"default":"host"}},"additionalProperties":false}"#;
 
 /// The rows this module reads: a detector's face boxes. Other fields pass.
 const BOXES_SCHEMA: &str = r#"{"type":"object","properties":{"class":{"type":"string"},"conf":{"type":"number"},"x":{"type":"number"},"y":{"type":"number"},"w":{"type":"number"},"h":{"type":"number"}},"required":["class","conf","x","y","w","h"]}"#;
@@ -60,7 +76,7 @@ const BOXES_SCHEMA: &str = r#"{"type":"object","properties":{"class":{"type":"st
 const FACES_SCHEMA: &str = r#"{"type":"object","properties":{"class":{"type":"string"},"conf":{"type":"number"},"x":{"type":"integer"},"y":{"type":"integer"},"w":{"type":"integer"},"h":{"type":"integer"},"age":{"type":"number"},"start_t":{"type":"number"},"id":{"type":"integer"}},"required":["class","conf","x","y","w","h","age","start_t","id"],"additionalProperties":false}"#;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
-struct Params {
+pub(crate) struct Params {
     hold: u32,
     every: u32,
 }
@@ -355,6 +371,9 @@ struct Ages {
     width: usize,
     height: usize,
     params: Params,
+    /// Where `v` is held.
+    #[cfg(feature = "gpu")]
+    memory: gpu::Memory,
     faces: Faces,
     /// Whether a frame's crops still go through as one batched tensor. The
     /// model's batch dimension is dynamic; a host that will not carry one
@@ -363,11 +382,14 @@ struct Ages {
     model: Model,
 }
 
+#[cfg(not(feature = "gpu"))]
 impl Ages {
     /// This frame's crops scored. The model's batch dimension is dynamic, so
     /// a frame's faces go through as one tensor; a host that refuses that is
     /// asked one crop at a time from there on.
     fn score(&mut self, frame: &[u8], boxes: &[FaceBox]) -> Result<Vec<f64>, String> {
+        use faceage_common::SIDE;
+
         let (width, height) = (self.width, self.height);
         let rects: Vec<Rect> = boxes
             .iter()
@@ -411,20 +433,93 @@ impl Ages {
     }
 }
 
+#[cfg(feature = "gpu")]
+impl Ages {
+    /// This frame's crops scored, the host making them into the tensor
+    /// (`ffrwd:gpu/nn.crops-tensor`) from frame `index` of `v` wherever the
+    /// frame is held. As on the host build, a frame's faces go through as
+    /// one tensor, and a host that refuses that is asked one crop at a time
+    /// from there on.
+    fn score(&mut self, index: u32, boxes: &[FaceBox]) -> Result<Vec<f64>, String> {
+        let (width, height) = (self.width, self.height);
+        let rects: Vec<gpu::Crop> = boxes
+            .iter()
+            .filter_map(|b| crop(*b, width, height))
+            .map(gpu::crop_rect)
+            .collect();
+        let options = gpu::options(Self::NAME);
+        let v = self.v;
+
+        if rects.len() > 1 && self.batched {
+            let tried = self
+                .model
+                .run_tensor(|| gpu::crops(v, index, &rects, &options))
+                .and_then(|returned| decode(&returned, rects.len()));
+            match tried {
+                Ok(ages) => return Ok(ages),
+                Err(why) => {
+                    self.batched = false;
+                    eprintln!(
+                        "ages: a batch of {} crops was refused ({why}); \
+                         one crop per call for the rest of this run",
+                        rects.len()
+                    );
+                }
+            }
+        }
+
+        let mut ages = Vec::with_capacity(rects.len());
+        for one in &rects {
+            let returned = self
+                .model
+                .run_tensor(|| gpu::crops(v, index, std::slice::from_ref(one), &options))?;
+            ages.push(decode(&returned, 1)?[0]);
+        }
+        Ok(ages)
+    }
+}
+
+/// The tracker's params out of the node's.
+#[cfg(not(feature = "gpu"))]
+fn tracking(params: &Params) -> Params {
+    *params
+}
+
+#[cfg(feature = "gpu")]
+fn tracking(settings: &gpu::Settings) -> Params {
+    settings.track
+}
+
+/// The formats `v` takes: `rgba`, cropped here.
+#[cfg(not(feature = "gpu"))]
+fn pixel_formats(_: &Params) -> &'static [&'static str] {
+    &["rgba"]
+}
+
+#[cfg(feature = "gpu")]
+use gpu::pixel_formats;
+
 impl Node for Ages {
     const NAME: &'static str = "ages";
     const VERSION: &'static str = "0.2.0";
     const PARAMS_SCHEMA: &'static str = PARAMS_SCHEMA;
+    #[cfg(not(feature = "gpu"))]
     type Params = Params;
+    #[cfg(feature = "gpu")]
+    type Params = gpu::Settings;
 
-    fn shape(_: &Params, _: &Bound) -> Result<Shape> {
+    fn shape(params: &Self::Params, _: &Bound) -> Result<Shape> {
         Ok(Shape::new()
-            .input(Input::video("v").clock().pixel_formats(&["rgba"]))
+            .input(
+                Input::video("v")
+                    .clock()
+                    .pixel_formats(pixel_formats(params)),
+            )
             .input(Input::rows("boxes").schema_json(BOXES_SCHEMA))
             .output(Output::rows("faces").schema_json(FACES_SCHEMA)))
     }
 
-    fn init(params: Params, init: &Init) -> Result<Ages> {
+    fn init(params: Self::Params, init: &Init) -> Result<Ages> {
         let v = init.stream("v")?;
         let video = v
             .video_format()
@@ -434,15 +529,22 @@ impl Node for Ages {
             boxes: init.stream("boxes")?.id,
             width: video.width as usize,
             height: video.height as usize,
-            params,
+            params: tracking(&params),
+            #[cfg(feature = "gpu")]
+            memory: params.memory,
             faces: Faces::default(),
             batched: true,
             model: Model::load(Self::NAME, Self::NAME, INPUT_NAME)?,
         })
     }
 
-    fn set_params(&mut self, params: Params) -> Result<()> {
-        self.params = params;
+    fn set_params(&mut self, params: Self::Params) -> Result<()> {
+        // Where `v` is held is the shape's, settled at init.
+        #[cfg(feature = "gpu")]
+        if params.memory != self.memory {
+            return Err("ages cannot move `v` between host and gpu memory while it runs".into());
+        }
+        self.params = tracking(&params);
         Ok(())
     }
 
@@ -459,8 +561,15 @@ impl Node for Ages {
             .collect();
         self.faces.now = tick.time_base().seconds(frame.pts);
         let mut faces = std::mem::take(&mut self.faces);
+        #[cfg(not(feature = "gpu"))]
         let rows = advance(&mut faces, &dets, self.params, |boxes| {
             self.score(&tick.fetch(self.v, frame.index), boxes)
+        });
+        // The host makes the crops from the frame wherever it is held, so the
+        // frame is never fetched here.
+        #[cfg(feature = "gpu")]
+        let rows = advance(&mut faces, &dets, self.params, |boxes| {
+            self.score(frame.index, boxes)
         });
         self.faces = faces;
         Ok(out.rows("faces", frame.pts, &rows?)?)

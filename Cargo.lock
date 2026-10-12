@@ -11,6 +11,19 @@ dependencies = [
  "ffrwd-node",
  "serde",
  "serde_json",
+ "wit-bindgen",
+]
+
+[[package]]
+name = "ages-gpu"
+version = "0.2.0"
+dependencies = [
+ "faceage-common",
+ "ffrwd-frame",
+ "ffrwd-node",
+ "serde",
+ "serde_json",
+ "wit-bindgen",
 ]
 
 [[package]]

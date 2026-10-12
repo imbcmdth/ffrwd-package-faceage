@@ -23,12 +23,15 @@
     "nn"
   ],
   "lib": {
-    "ages": "src/model.sql"
+    "ages": "src/model.sql",
+    "ages_gpu": "src/model.sql"
   },
   "bin": {
     "blur-children": "recipes/blur-children.sql",
     "mosaic-children": "recipes/mosaic-children.sql",
-    "ages": "recipes/ages.sql"
+    "ages": "recipes/ages.sql",
+    "blur-children-gpu": "recipes/blur-children-gpu.sql",
+    "mosaic-children-gpu": "recipes/mosaic-children-gpu.sql"
   },
   "models": {
     "ages": {

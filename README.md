@@ -55,6 +55,25 @@ ffmpeg hands the module already converted to RGB with the stream's own
 range and matrix. It also carries a gender head, which this module
 does not read.
 
+## On the GPU
+
+`ages_gpu(v, boxes, hold, every, memory DEFAULT 'gpu')` is the GPU build
+of `ages`, with the same rows. The host makes the frame's due crops into
+one batched tensor (`ffrwd:gpu/nn.crops-tensor`), cropped the same way
+and resized with Pillow's bicubic kernel, and the model runs once a
+frame for every face due a score. With `memory => 'gpu'` the frame stays
+on the sidecar's device and is never read back; with `'host'` the
+tensor is made on the CPU. On the classroom check clip the tensor is
+within a mean of 0.001 of the host build's (0 to 1 units; the host build
+rounds to 8 bits between its two resize passes), each face's age is
+within 0.4 years of the host build's for every child and 1 year for the
+adult, and the same faces are under 16 on every frame.
+
+`blur-children-gpu` and `mosaic-children-gpu` are the recipes with
+every step's GPU build: `ffrwd/rfdetr`'s `detect_faces_gpu` and
+`boxes_mask_gpu`, and `ffrwd/mask_tools`'s `blur_where_gpu` or
+`mosaic_where_gpu`.
+
 ## Choosing `max_age`
 
 The recipes keep a face when its estimated age is under `max_age`.
@@ -92,6 +111,8 @@ every other field pass, so it rasterizes `ages`' rows as they are.
   `sigma`.
 - `ages`: every face with its age as NDJSON, one line per face per
   frame, no video written.
+- `blur-children-gpu`, `mosaic-children-gpu`: the first two with every
+  step on the GPU.
 
 Run `ffrwd list ffrwd/faceage` for each one's variables, or read the
 header of the recipe file. To blur every face regardless of age, use
@@ -109,10 +130,16 @@ third of a second at `every` 5, where the estimate is the same to a
 tenth of a year.
 
 DirectML loads this graph and then fails inside the backbone on its
-first inference, so the model's pin says `not_on: directml` and the
-sidecar's GPU walk skips it: on Windows that lands on CUDA, and on a
-machine without it the CPU runs the model at about seven times the
-wall clock.
+first inference, so the model's pin says `not_on: directml`. The
+sidecar's GPU walk then takes a provider no model of the run excludes:
+on Windows that is CUDA where CUDA is installed, and on a machine
+without it the CPU runs the model at about seven times the wall clock.
+
+Through `blur-children` on the 4090, five faces a frame, the model takes
+about 25 ms a frame and the face detector about 7 ms, whether the
+picture is 720p or 4K. With every step on the GPU and `h264_d3d12va`
+encoding, a 343-frame clip runs at 23 frames a second at 720p and 21 at
+4K, start-up included, against 21 and 12 for the host builds.
 
 The module is declared impure on purpose: a tracker carries state
 from one frame to the next, and sharing the stream among parallel
@@ -146,7 +173,10 @@ ffrwd install
 the world it is built against, so there is no `build.rs` and nothing to
 install before building; `common` holds the graph run through
 `wasi:nn`. It crops, resizes and normalizes with the
-[ffrwd-frame](https://github.com/imbcmdth/ffrwd-frame) crate. The
+[ffrwd-frame](https://github.com/imbcmdth/ffrwd-frame) crate.
+`ages_gpu.wasm` is the same source with the `gpu` feature on, built by
+the `ages-gpu` crate, with the `ffrwd:gpu` bindings over the copy of its
+wit in `ages/wit-gpu/`. The
 package depends on `ffrwd/rfdetr` 0.4.0 for `detect_faces` and
 `boxes_mask`, which `ffrwd install` fetches with the model.
 

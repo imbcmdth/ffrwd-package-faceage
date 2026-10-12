@@ -20,3 +20,16 @@ CREATE FUNCTION ages(v video_stream,
 RETURNS STRUCT(class text, conf number, x number, y number, w number, h number,
                age number, start_t number, id number)[]
   AS 'target/wasm32-wasip2/release/ages.wasm', 'ages' LANGUAGE wasm;
+
+-- `ages` with the crops made by the host: each frame's due faces become one
+-- tensor without the module reading the picture. With `memory` 'gpu' the
+-- picture stays on the GPU and the crops are made there; with 'host' they are
+-- made on the CPU. The rows are `ages`' rows, and the model is the same one.
+CREATE FUNCTION ages_gpu(v video_stream,
+                         boxes STRUCT(class text, conf number,
+                                      x number, y number, w number, h number)[],
+                         hold number DEFAULT 5, every number DEFAULT 1,
+                         memory text DEFAULT 'gpu')
+RETURNS STRUCT(class text, conf number, x number, y number, w number, h number,
+               age number, start_t number, id number)[]
+  AS 'target/wasm32-wasip2/release/ages_gpu.wasm', 'ages' LANGUAGE wasm;

@@ -61,14 +61,26 @@ impl Model {
     /// One fp32 tensor of `dimensions` through the graph, and every tensor
     /// it returned, in its own order.
     pub fn run(&mut self, dimensions: &[u32], data: &[u8]) -> Result<Vec<Returned>, String> {
-        let returned = match self.compute(self.input, dimensions, data) {
+        self.run_tensor(|| Ok(Tensor::new(dimensions, TensorType::Fp32, data)))
+    }
+
+    /// The tensor `tensor` makes through the graph, and every tensor it
+    /// returned, in its own order. A tensor is spent by the call it goes to,
+    /// so a retry under the other input name asks `tensor` for it again.
+    pub fn run_tensor(
+        &mut self,
+        mut tensor: impl FnMut() -> Result<Tensor, String>,
+    ) -> Result<Vec<Returned>, String> {
+        let first = vec![(self.input.to_string(), tensor()?)];
+        let returned = match self.context.compute(first) {
             Ok(returned) => returned,
             // An export whose input is not called what this one calls it. The
             // host takes a position where it takes a name, so the retry names
             // none, and the name that worked is kept for every call after it.
             Err(_) if self.input != INPUT_INDEX => {
                 self.input = INPUT_INDEX;
-                self.compute(INPUT_INDEX, dimensions, data)
+                self.context
+                    .compute(vec![(INPUT_INDEX.to_string(), tensor()?)])
                     .map_err(|e| failed(self.module, "compute", &e))?
             }
             Err(e) => return Err(failed(self.module, "compute", &e)),
@@ -80,16 +92,6 @@ impl Model {
                 values: le_f32s(&tensor.data()),
             })
             .collect())
-    }
-
-    fn compute(
-        &self,
-        name: &str,
-        dimensions: &[u32],
-        data: &[u8],
-    ) -> Result<Vec<(String, Tensor)>, Error> {
-        let tensor = Tensor::new(dimensions, TensorType::Fp32, data);
-        self.context.compute(vec![(name.to_string(), tensor)])
     }
 }
 

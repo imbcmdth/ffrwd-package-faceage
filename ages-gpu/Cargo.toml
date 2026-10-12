@@ -1,0 +1,26 @@
+[package]
+name = "ages-gpu"
+version = "0.2.0"
+edition = "2021"
+
+# ages' own source with the `gpu` feature on: the build that asks the host for
+# its crops as one tensor and may hold its frames on the GPU, as ages_gpu.wasm
+# beside the host build's ages.wasm.
+[lib]
+name = "ages_gpu"
+path = "../ages/src/lib.rs"
+crate-type = ["cdylib"]
+
+[features]
+default = ["gpu"]
+gpu = []
+
+[dependencies]
+ffrwd-node = { git = "https://github.com/imbcmdth/ffrwd-node", tag = "v0.2.0" }
+ffrwd-frame = { git = "https://github.com/imbcmdth/ffrwd-frame", tag = "v0.1.1" }
+serde = { version = "1.0.229", features = ["derive"] }
+faceage-common = { path = "../common" }
+wit-bindgen = "0.57.1"
+
+[dev-dependencies]
+serde_json = "1.0.151"

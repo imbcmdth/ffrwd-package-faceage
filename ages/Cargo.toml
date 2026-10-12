@@ -7,11 +7,19 @@ edition = "2021"
 name = "ages"
 crate-type = ["cdylib"]
 
+[features]
+# The GPU build: a node beside ffrwd:gpu, the host making the crops into the
+# graph's input. The `ages-gpu` crate builds this source with it on, as
+# ages_gpu.wasm.
+gpu = ["dep:wit-bindgen"]
+
 [dependencies]
 ffrwd-node = { git = "https://github.com/imbcmdth/ffrwd-node", tag = "v0.2.0" }
 ffrwd-frame = { git = "https://github.com/imbcmdth/ffrwd-frame", tag = "v0.1.1" }
 serde = { version = "1.0.229", features = ["derive"] }
 faceage-common = { path = "../common" }
+# The ffrwd:gpu bindings, for the `gpu` feature alone.
+wit-bindgen = { version = "0.57.1", optional = true }
 
 [dev-dependencies]
 serde_json = "1.0.151"
