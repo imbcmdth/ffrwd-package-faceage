@@ -214,9 +214,13 @@ model and that the attribution be shown.
 
 The weights are not in the archive: the manifest pins them - repo,
 revision, file and sha256 - and `ffrwd install` fetches and verifies
-them. The pinned file is the source's fp32 ONNX halved to fp16 with
-its input and outputs left fp32, 612 MB, and lives in
+them. The pinned file, `faceage-dino-vitl16-fused-fp16.onnx`, is the
+source network rebuilt with fused ONNX Runtime operators: its MatMuls
+and attention are fp16, and its residual stream, LayerNorms, input and
+outputs fp32. It is 611 MB and needs ONNX Runtime 1.22 or later, the
+version `ffrwd setup nn` installs. It lives in
 [imbcmdth/faceage-onnx](https://huggingface.co/imbcmdth/faceage-onnx)
-with the conversion scripts, the validation against the source (a
-mean age difference of 0.012 years) and the license beside it, run
-through `wasi:nn` on the machine's own ONNX Runtime.
+with the script that builds it, the validation against the source (a
+mean age difference of 0.0036 years on the CPU and 0.0086 through
+CUDA) and the license beside it, and runs through `wasi:nn` on the
+machine's own ONNX Runtime.
