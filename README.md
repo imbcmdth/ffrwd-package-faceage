@@ -128,24 +128,40 @@ exempts consenting adults.
 
 ## Running it
 
-The age model is a 300M-parameter transformer run once per face per
-`every` frames. On an RTX 4090 through CUDA that is about five
-milliseconds a face, so ten faces at 30 frames a second cost about a
-second and a half of GPU time per second of video at `every` 1, and a
-third of a second at `every` 5, where the estimate is the same to a
-tenth of a year.
+The age model is a 300M-parameter transformer. A frame's due faces run
+through it as one batch: on an RTX 4090 through CUDA, one face takes
+3.4 ms, five take 6.8 ms and ten take 12.1 ms.
+
+A face is scored on each of its first three frames and then once every
+`every` frames. The four blur and mosaic recipes use `every` 5 unless
+it is given; `ages` and `ages_gpu` called directly, and the `ages`
+recipe, keep 1. On the classroom check clip, five faces a frame,
+`every` 5 blurs the same faces on every frame as `every` 1, each
+child's age stays within 0.8 years of `every` 1's and the adult's
+within 2.3, and the chain runs about 50 percent faster:
+
+| `every` | 720p | 4K |
+|---|---|---|
+| 1 | 67 | 62 |
+| 2 | 83 | 74 |
+| 3 | 88 | 85 |
+| 5 | 103 | 92 |
+| 10 | 116 | 101 |
+
+These are sustained frames a second through `blur-children-gpu` with
+`h264_d3d12va` encoding on the 4090, start-up excluded. The whole
+343-frame clip, start-up included, runs at 52 frames a second at 720p
+and 47 at 4K at `every` 5, against 40 and 37 at `every` 1. `every` 10
+also changed no blur decision on the clip and is about a tenth faster
+at 4K, but its age is the mean of three scores rather than six, so one
+far-off score moves it further. Give `every` 1 to score every face on
+every frame.
 
 DirectML loads this graph and then fails inside the backbone on its
 first inference, so the model's pin says `not_on: directml`. The
 sidecar's GPU walk then takes a provider no model of the run excludes:
 on Windows that is CUDA where CUDA is installed, and on a machine
 without it the CPU runs the model at about seven times the wall clock.
-
-Through `blur-children` on the 4090, five faces a frame, the model takes
-about 25 ms a frame and the face detector about 7 ms, whether the
-picture is 720p or 4K. With every step on the GPU and `h264_d3d12va`
-encoding, a 343-frame clip runs at 23 frames a second at 720p and 21 at
-4K, start-up included, against 21 and 12 for the host builds.
 
 The module is declared impure on purpose: a tracker carries state
 from one frame to the next, and sharing the stream among parallel
