@@ -5,8 +5,9 @@
 //! thresholds sum to an age in years.
 //!
 //! A face is not scored afresh every frame. Boxes are followed from frame to
-//! frame by overlap, and a face carries the running mean of its own last
-//! thirty scores, so the number a row reports settles rather than jitters.
+//! frame by overlap, and a face carries the running mean of the scores it
+//! took over its last thirty frames, so the number a row reports settles
+//! rather than jitters.
 //! `every` is how many frames apart a face is scored once it has been scored
 //! on each of its first three frames, so the work is one inference per face
 //! per `every` frames, and `hold` keeps a face the
@@ -58,8 +59,12 @@ const THRESHOLDS: usize = 100;
 /// are the same faces.
 const FACE: &str = "face";
 
-/// How many of a face's own scores its age is the mean of.
-const MEMORY: usize = 30;
+/// How many frames of a face's scores its age is the mean of. The window is
+/// counted in frames, not scores, so an age follows a change as fast at any
+/// `every`: when the tracker hands an adult's track to a child beside them,
+/// the child's own scores outvote the adult's in about a dozen frames. With
+/// a window of thirty scores that took about sixty frames at `every` 5.
+const WINDOW: u32 = 30;
 
 /// How much two boxes have to overlap to be the same face a frame later.
 const MATCH_IOU: f64 = 0.3;
@@ -147,7 +152,7 @@ struct Track {
     /// Where it was last seen, and how sure the detector was of it.
     b: FaceBox,
     conf: f64,
-    /// Its last `MEMORY` scores, oldest first.
+    /// Its scores over the last `WINDOW` frames, oldest first.
     scores: VecDeque<f64>,
     /// Frames since it was last scored.
     since: u32,
@@ -162,15 +167,16 @@ impl Track {
             id,
             b: det.b,
             conf: det.conf,
-            scores: VecDeque::with_capacity(MEMORY),
+            scores: VecDeque::new(),
             since: 0,
             missed: 0,
         }
     }
 
-    /// One more score, the oldest dropped once there are `MEMORY` of them.
-    fn scored(&mut self, age: f64) {
-        if self.scores.len() == MEMORY {
+    /// One more score, the oldest dropped once there are as many as `every`
+    /// keeps.
+    fn scored(&mut self, age: f64, every: u32) {
+        while self.scores.len() >= kept(every) {
             self.scores.pop_front();
         }
         self.scores.push_back(age);
@@ -208,6 +214,12 @@ impl Track {
             id: self.id,
         }
     }
+}
+
+/// How many scores a face keeps at `every`: those of its last `WINDOW`
+/// frames, and never fewer than the `FIRST` it takes on arrival.
+fn kept(every: u32) -> usize {
+    (WINDOW.div_ceil(every.max(1)) as usize).max(FIRST)
 }
 
 /// Which returned tensor is the age head, by shape: the CORAL thresholds are a
@@ -326,7 +338,7 @@ fn advance(
             ));
         }
         for (at, age) in due.iter().zip(ages) {
-            tracks[*at].scored(age);
+            tracks[*at].scored(age, params.every);
         }
     }
 
@@ -721,19 +733,58 @@ mod tests {
     #[test]
     fn the_running_mean_forgets_past_thirty_scores() {
         let mut track = Track::new(det(0.0, 0.0, 10.0, 10.0), 0.0, 0);
-        for _ in 0..MEMORY {
-            track.scored(10.0);
+        for _ in 0..30 {
+            track.scored(10.0, 1);
         }
-        assert_eq!(track.scores.len(), MEMORY);
+        assert_eq!(track.scores.len(), 30);
         assert!((track.age() - 10.0).abs() < 1e-9);
-        for _ in 0..MEMORY {
-            track.scored(40.0);
+        for _ in 0..30 {
+            track.scored(40.0, 1);
         }
-        assert_eq!(track.scores.len(), MEMORY, "thirty and no more");
+        assert_eq!(track.scores.len(), 30, "thirty and no more");
         assert!(
             (track.age() - 40.0).abs() < 1e-9,
             "the first thirty are gone"
         );
+    }
+
+    #[test]
+    fn the_running_mean_spans_thirty_frames_whatever_every_is() {
+        assert_eq!(kept(1), 30);
+        assert_eq!(kept(2), 15);
+        assert_eq!(kept(4), 8, "thirty frames, rounded up to whole scores");
+        assert_eq!(kept(10), FIRST);
+        assert_eq!(kept(600), FIRST, "never fewer than a new face takes");
+
+        // An adult's track handed to a child at `every` 5: the age is the
+        // child's once the six scores of the last thirty frames are theirs.
+        let mut faces = Faces::default();
+        let params = Params { hold: 5, every: 5 };
+        let one = [det(0.0, 0.0, 100.0, 100.0)];
+        for _ in 0..60 {
+            advance(&mut faces, &one, params, answers(&[30.0])).unwrap();
+        }
+        let mut frames = 0;
+        while faces.tracks[0].age() >= 16.0 {
+            advance(&mut faces, &one, params, answers(&[8.0])).unwrap();
+            frames += 1;
+        }
+        assert!(frames <= 20, "{frames} frames to follow the change");
+        assert_eq!(faces.tracks[0].scores.len(), kept(5));
+    }
+
+    #[test]
+    fn a_change_of_every_resizes_the_window_at_the_next_score() {
+        let mut track = Track::new(det(0.0, 0.0, 10.0, 10.0), 0.0, 0);
+        for _ in 0..30 {
+            track.scored(10.0, 1);
+        }
+        track.scored(10.0, 10);
+        assert_eq!(track.scores.len(), kept(10), "the oldest dropped");
+        for _ in 0..20 {
+            track.scored(10.0, 2);
+        }
+        assert_eq!(track.scores.len(), kept(2), "and grows back to fifteen");
     }
 
     #[test]
@@ -854,8 +905,8 @@ mod tests {
             1.5,
             3,
         );
-        track.scored(11.111);
-        track.scored(12.222);
+        track.scored(11.111, 1);
+        track.scored(12.222, 1);
         assert_eq!(
             serde_json::to_string(&track.row()).unwrap(),
             r#"{"class":"face","conf":0.8794,"x":222,"y":62,"w":417,"h":500,"age":11.7,"start_t":1.5,"id":3}"#

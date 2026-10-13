@@ -10,10 +10,10 @@
 -- takes it from the source. Boxes are followed from frame to frame, so a face
 -- keeps one estimate rather than a fresh one per frame: `every` is how many
 -- frames apart a face is scored once it has been scored on each of its first
--- three frames, and the age a row carries is the running
--- mean of what that face scored. `hold` keeps a face the detector lost for
--- that many frames, re-emitted where it was last seen, so a blur does not
--- flicker off for the frame a head turns.
+-- three frames, and the age a row carries is the mean of what that face scored
+-- over its last thirty frames. `hold` keeps a face the detector lost for that
+-- many frames, re-emitted where it was last seen, so a blur does not flicker
+-- off for the frame a head turns.
 CREATE FUNCTION ages(v video_stream,
                      boxes STRUCT(class text, conf number,
                                   x number, y number, w number, h number)[],

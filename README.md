@@ -39,17 +39,21 @@ The call is written once and runs once; the gather narrows its rows on
 their way to the matte.
 
 A face is not scored afresh every frame. The module follows boxes from
-one frame to the next by overlap, and the age a row carries is the
-mean of that face's last thirty scores, so the number settles instead
-of jittering between frames. `every` is how many frames apart one face
-is scored - the work is one inference per face per `every` frames -
-once it has been scored on each of its first three frames, so a
-far-off first score is outvoted on the next frame, as at `every` 1.
-`hold` keeps a face the detector lost for that many frames,
-re-emitted at its last box, so a blur does not flicker off for the one
-frame a head turns. Both are for video: on a slideshow of unrelated
-stills set `hold` to 0, or a face in the same place on the next still
-is taken for the same person.
+one frame to the next by overlap. A new face is scored on each of its
+first three frames and then once every `every` frames, so the work is
+about one inference per face per `every` frames. The age a row carries
+is the mean of the scores that face took over its last thirty frames,
+and never of fewer than three, so the number settles instead of
+jittering between frames. A far-off first score is outvoted on the
+next frame, as at `every` 1. Because the window is counted in frames
+rather than scores, an age follows a change as fast at `every` 5 as at
+1: when the tracker hands an adult's track to a child beside them, the
+child's own scores outvote the adult's in about a dozen frames. `hold`
+keeps a face the detector lost for that many frames, re-emitted at its
+last box, so a blur does not flicker off for the one frame a head
+turns. Both are for video: on a slideshow of unrelated stills set
+`hold` to 0, or a face in the same place on the next still is taken
+for the same person.
 
 The graph reads a crop of each box padded by ten percent on every
 side, resized to 224x224 the way the model was trained, off the frame
