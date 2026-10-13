@@ -7,8 +7,9 @@
 //! A face is not scored afresh every frame. Boxes are followed from frame to
 //! frame by overlap, and a face carries the running mean of its own last
 //! thirty scores, so the number a row reports settles rather than jitters.
-//! `every` is how many frames apart a face is scored, so the work is one
-//! inference per face per `every` frames, and `hold` keeps a face the
+//! `every` is how many frames apart a face is scored once it has been scored
+//! on each of its first three frames, so the work is one inference per face
+//! per `every` frames, and `hold` keeps a face the
 //! detector lost, re-emitted where it was last seen, so what reads these rows
 //! does not flicker for the frame a head turns. Each row names its face by
 //! the time it was first seen, `start_t`, and by how many faces were first
@@ -62,6 +63,13 @@ const MEMORY: usize = 30;
 
 /// How much two boxes have to overlap to be the same face a frame later.
 const MATCH_IOU: f64 = 0.3;
+
+/// How many scores a new face takes on consecutive frames before `every`
+/// spaces them out. One score can be far off: on the check clip a child
+/// whose scores average 7.7 scored 17.3 on one frame. With three, a first
+/// score like that is outvoted on the next frame, as it is at `every` 1,
+/// instead of standing for `every` frames.
+const FIRST: usize = 3;
 
 #[cfg(not(feature = "gpu"))]
 const PARAMS_SCHEMA: &str = r#"{"type":"object","properties":{"hold":{"type":"integer","minimum":0,"maximum":600,"default":5},"every":{"type":"integer","minimum":1,"maximum":600,"default":1}},"additionalProperties":false}"#;
@@ -178,10 +186,11 @@ impl Track {
         (mean * 10.0).round() / 10.0
     }
 
-    /// Whether this face is due a score: always the first time, and then
-    /// whenever `every` frames have gone by since the last one.
+    /// Whether this face is due a score: on each of the first `FIRST` frames
+    /// it is seen, and then whenever `every` frames have gone by since the
+    /// last one.
     fn due(&self, every: u32) -> bool {
-        self.scores.is_empty() || self.since >= every
+        self.scores.len() < FIRST || self.since >= every
     }
 
     fn row(&self) -> Row {
@@ -740,26 +749,46 @@ mod tests {
                 })
                 .unwrap();
             }
-            // Twenty frames, the first one always scored and then one every
-            // `every` after it.
-            let want = 1 + (20 - 1) / every as usize;
+            // Twenty frames: the first three scored, then one every `every`
+            // frames after the third.
+            let want = FIRST + (20 - FIRST) / every as usize;
             assert_eq!(scored, want, "every {every}");
         }
+    }
+
+    #[test]
+    fn a_new_face_is_scored_on_each_of_its_first_frames_whatever_every_is() {
+        let mut faces = Faces::default();
+        let params = Params { hold: 5, every: 10 };
+        let one = [det(0.0, 0.0, 100.0, 100.0)];
+        // One far-off first score, then the face's usual one.
+        for age in [17.0, 8.0, 8.0] {
+            advance(&mut faces, &one, params, answers(&[age])).unwrap();
+        }
+        assert_eq!(faces.tracks[0].scores.len(), FIRST);
+        assert_eq!(faces.tracks[0].age(), 11.0, "outvoted on the next frames");
+        let out = advance(&mut faces, &one, params, |_| {
+            panic!("past its first frames, a face waits `every` frames")
+        })
+        .unwrap();
+        assert_eq!(field(&out[0], "age"), 11.0);
     }
 
     #[test]
     fn a_face_between_scores_still_reports_its_age_at_this_frames_box() {
         let mut faces = Faces::default();
         let params = Params { hold: 5, every: 5 };
-        advance(
-            &mut faces,
-            &[det(0.0, 0.0, 100.0, 100.0)],
-            params,
-            answers(&[12.0]),
-        )
-        .unwrap();
+        for _ in 0..FIRST {
+            advance(
+                &mut faces,
+                &[det(0.0, 0.0, 100.0, 100.0)],
+                params,
+                answers(&[12.0]),
+            )
+            .unwrap();
+        }
         let out = advance(&mut faces, &[det(20.0, 0.0, 100.0, 100.0)], params, |_| {
-            panic!("nothing is due on the second frame")
+            panic!("nothing is due on the frame after the first three")
         })
         .unwrap();
         assert_eq!(out.len(), 1);
