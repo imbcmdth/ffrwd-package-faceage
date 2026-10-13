@@ -36,9 +36,9 @@
   "models": {
     "ages": {
       "repo": "imbcmdth/faceage-onnx",
-      "revision": "0e71b69830e460cb1c7d1d3085c277f3b17c4f2c",
-      "file": "faceage-dino-fp16.onnx",
-      "sha256": "b2e804783e197066cd8cf65a7cbc39a0579ea87c34660abd8ca942df8672cf70",
+      "revision": "c795238c86f26fc5d9b321c8a6df1d35613f5346",
+      "file": "faceage-dino-vitl16-fused-fp16.onnx",
+      "sha256": "30c5531f17a1faa1f27891cb8af3e12f1fb14ea5f456192d0f1afcc8c9105ba0",
       "not_on": ["directml"]
     }
   }
