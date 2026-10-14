@@ -8,7 +8,7 @@ on each; the query keeps the rows under an age; `ffrwd/rfdetr`'s
 mosaics where the matte says. Everything downstream of the model is
 native ffmpeg.
 
-Requires ffrwd 0.29, whose `ffrwd/wasm` is 0.19.1.
+Requires ffrwd 0.30, whose `ffrwd/wasm` is 0.19.1.
 
 ```
 ffrwd run ffrwd/faceage:blur-children -v source=class.mp4 -v max_age=16 -v dest=blurred.mp4
@@ -73,7 +73,8 @@ tensor is made on the CPU. On the classroom check clip the tensor is
 within a mean of 0.001 of the host build's (0 to 1 units; the host build
 rounds to 8 bits between its two resize passes), each face's age is
 within 0.4 years of the host build's for every child and 1 year for the
-adult, and the same faces are under 16 on every frame.
+adult, and the same faces are under 16 on every frame. `ages_gpu`
+needs ffrwd 0.30.
 
 `blur-children-gpu` and `mosaic-children-gpu` are the recipes with
 every step's GPU build: `ffrwd/rfdetr`'s `detect_faces_gpu` and
@@ -199,7 +200,7 @@ install before building; `common` holds the graph run through
 `ages_gpu.wasm` is the same source with the `gpu` feature on, built by
 the `ages-gpu` crate, with the `ffrwd:gpu` bindings over the copy of its
 wit in `ages/wit-gpu/`. The
-package depends on `ffrwd/rfdetr` 0.4.0 for `detect_faces` and
+package depends on `ffrwd/rfdetr` 0.5.0 for `detect_faces` and
 `boxes_mask`, which `ffrwd install` fetches with the model.
 
 ## License

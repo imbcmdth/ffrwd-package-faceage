@@ -1,6 +1,6 @@
 [package]
 name = "ages-gpu"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 
 # ages' own source with the `gpu` feature on: the build that asks the host for

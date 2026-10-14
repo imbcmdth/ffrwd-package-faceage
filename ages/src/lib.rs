@@ -522,7 +522,7 @@ use gpu::pixel_formats;
 
 impl Node for Ages {
     const NAME: &'static str = "ages";
-    const VERSION: &'static str = "0.2.0";
+    const VERSION: &'static str = "0.3.0";
     const PARAMS_SCHEMA: &'static str = PARAMS_SCHEMA;
     #[cfg(not(feature = "gpu"))]
     type Params = Params;
